@@ -6,7 +6,7 @@ OpenJPEG is an open-source JPEG 2000 codec written in C language. It has been de
 
 ## What is OpenJPEGDash and what does it bring ? 
 
-OpenJPEGDash is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes the broken JNI code and bindings.** 
+OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes the broken JNI code and bindings.** 
 
 It also **provides binaries** of the **native libraries (the JNI and the OpenJP2 libraries)** for `Windows x86 and x86_64 architectures, for Linux x86 and x86_64 architectures, and for Android armeabi-v7a, arm64-v8a, x86 and x86_64 ABIs.`
 
