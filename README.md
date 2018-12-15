@@ -14,12 +14,12 @@ It also **provides binaries** of the **native libraries (the JNI and the OpenJP2
 
 All the code that I had to modify / add is under the **wrapping** folder and the **root CMakeLists.txt**. In the following, I explain how I managed to make the JNI part of OpenJPEG work.
 
-Please note that only the **decoder** has been implemented and tested under **Java 1.8**. 
+Please note that only the **JNI decoder** has been **implemented** and **tested** under **Java 1.8**, on Windows, Linux and Android. 
 
 ## How I managed to make the JNI part of OpenJPEG wotk ?
 
 The code in `wrapping/java/openjp2/JavaOpenJpegDecoder.c` and the `CMakeLists.txt` are outdated.
-It makes use of **old** and **deprected** functions and structures, usually defined in files under `src/lib/openmj2 (e.g. openjpeg.h).`
+It makes use of **old** and **deprecated** functions and structures, usually defined in files under `src/lib/openmj2 (e.g. openjpeg.h).`
 Therefore, in order to make the JNI part of OpenJPEG work and to be able to build native JNI libraries for Windows, Linux and Android / ARM, 
 I had to get rid of the old and deprecated code and replace it with the newest one from the latest release of OpenJPEG, v.2.3.0.
 
@@ -28,7 +28,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
  - **1st approach : FAILURE**
 
 	My first approach was to clean up the `CMakeLists.txt` as well as the `#include` list in `JavaOpenJpegDecoder.c` 
-	then to add source files and include directories when they were needed, and tweek the code as needed.
+	then to add source files and include directories when they were needed, and tweak the code as needed.
 	This looked promising, until I encountered a lot of code in `JavaOpenJpegDecoder.c` that was using **structures** defined in the source file `openjpeg.h under src/lib/openmj2`, **rather than the one under src/lib/openjp2.**
 
 	My first instinct was to merge both files, which I first did. However, after running a couple of tests, I encountered numerous bugs related to some basic assert instructions.
@@ -42,56 +42,45 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 
 	By looking at the code in `src/bin/jp2/opj_decompress.c`, I couldn't help but notice that it looked a lot similar to	the one under `JavaOpenJpegDecoder.c`.
 
-	In short, I had the idea to copy the code from `src/bin/jp2/opj_decompress.c` into `JavaOpenJpegDecoder.c`, and tweek it in order to make it work.
+	In short, I had the idea to copy the code from `src/bin/jp2/opj_decompress.c` into `JavaOpenJpegDecoder.c`, and tweak it in order to make it work.
 	
-	But, the `opj_decompress.c` code can only **deal with files / folders** which are passed to it as parameters in a command line	style using -i, -o, -ImgDir etc... The `JavaOpenJpegDecoder.c` code, on the other hand, enables the caller to either : 
-	* use the command line style => the behaviour will be similar to the one of opj_decompress.c
+	But, the `opj_decompress.c` code can only **deal with files / folders** which are passed to it as parameters in a command line	style **using -i, -o, -ImgDir** etc... The `JavaOpenJpegDecoder.c` code, on the other hand, enables the caller to either : 
+	* use the command line style : the behaviour will be similar to the one of `opj_decompress.c`
 		or 
-	* directly set the J2K /JP2 / JPT input stream as a byte array from the Java code, pass it to the C code,  which will decode / decompress it and finally will return the resulting output stream in some format to the Java code.
+	* directly set the **J2K /JP2 / JPT input stream** as a byte array from the Java code, pass it to the C code,  which will decode / decompress it and finally will return the resulting output stream in some format to the Java code.
 	
 	**The second option was the major change that I had to implement.**
 	
 	Side notes : (of when using an input stream)
 	
-	- Only the BMP output format is supported for when the caller sets the input stream from Java code. 
+	- **Only the BMP output format** is supported for when the caller sets the input stream from Java code. 
 	This is due to the fact that, to produce the other formats, the code makes use of functions (e.g. imagetoXXX() where XXX is the output format) which are difficult to port from the default "File phylosophy" into the "Stream phylosophy" due to a lack of generic code in these functions.
-	The function imagetobmp() was the only generic one amongst the others and the easiest to reimplement.
+	The function **imagetobmp()** was the only generic one amongst the others and the easiest to reimplement.
 	Feel free to implement the other functions if you can and make a pull request! :)
 	
-	- I made sure in my code to avoid storing the input stream in the C code heap, by passing it as Java NIO ByteBuffer and getting only a reference from the C code to the byte array in the Java code.
+	- I made sure in my code to avoid storing the input stream in the C code heap, by passing it as **Java NIO ByteBuffer** and getting only a reference from the C code to the byte array in the Java code.
 	
 	- I made sure in my code to avoid storing the output stream as a large byte array in the C code and then pass it finally to the Java code.
 	Sometimes, bmp images can be very big and we cannot afford failing the decoding because of a lack of memory to hold the entire output.
-	Also, there are limits regarding the size of memory that a process can lock.
-	Windows and Linux both set a limit to the amount of data that can be locked (See Working Sets and RLIMIT_MEMLOCK).
-	For Windows, the maximum amount of memory that can be locked by the process IN ITS WORKING SET is equal to the minimum quota size of the working set.
-	It can be found by calling GetProcessWorkingSetSize() and can be modified via SetProcessWorkingSetSize() (not recommended)
-	For Linux, the maximum amount of memory that can be locked by the process can be found by using getrlimit() and retrieving the soft / hard limits.
-	For Windows, to get the current memory that is locked IN ITS WORKING SET, we can only iterate on ALL the pages in the working set, and retrieve info  about each page and look for the "Locked" flag then do some math. The page size can be found from GetSystemInfo().
-	For Linux, to get the current memory that is locked by the process, we can read /proc/$PID/status and retrieve it from the line starting with VmLck.
-	
-	- I couldn't avoid using the opj_stream_private_t variable l_stream since it was used really everywhere. The entire struct has a size of 120 bytes, and inside the struct, there exists a buffer of bytes which is filled with bytes from the input stream during the decoding. The buffer keeps the same size that
-	was set when creating it.
-	By default, it is given a size of OPJ_J2K_STREAM_CHUNK_SIZE bytes (1 MB). (FIX ME : What if we don't have 1 MB available? )
 	
 	- I will provide, in the future, the function setLocking() in Java code, which can be called only when using input streams. 
 	When used, it sets locking in the C Code, meaning that the buffers used during the decoding and the output of the result will be 
 	locked and prevented from being swapped, using VirtualLock / VirtualUnlock on Windows and mlock / munlock under Linux.
 	This is a work in progress, as there are multiple challenges regarding this. It is thus not yet implemented.
 
-	N.B : 
+	**N.B : **
 	
 	*	In `opj_malloc.h under src/lib/openjp2`, there is a block of code that **poisons "malloc calloc realloc free".** 
 	
-		#if defined(__GNUC__) && !defined(OPJ_SKIP_POISON)
-		#pragma GCC poison malloc calloc realloc free
-		#endif
+			#if defined(__GNUC__) && !defined(OPJ_SKIP_POISON)
+			#pragma GCC poison malloc calloc realloc free
+			#endif
 	
 		This means that whoever wrote that code wanted to make sure that such calls are treated as hard errors.
 		This forces the devs to use opj_malloc, opj_calloc, opj_realloc and opj_free.
 		
 		However, when I used opj_realloc in my method `opj_write_to_stream()`, I encountered the following error : 
-		*"Invalid address specified to RtlValidateHeap.*"
+		*"Invalid address specified to RtlValidateHeap."*
 		This was fixed by just using `realloc().`
 		
 		Also there is original code in `opj_decompress.c` and `JavaOpenJPEGDecoder.c` that makes use of free, realloc and company.
