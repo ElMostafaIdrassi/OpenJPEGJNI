@@ -6,13 +6,15 @@ OpenJPEG is an open-source JPEG 2000 codec written in C language. It has been de
 
 ## What is OpenJPEGJNI and what does it bring ? 
 
-OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes the broken JNI code and bindings.** 
+OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes the broken JNI code and bindings for only the decoder.** 
 
 It also **provides binaries** of the **native libraries (the JNI and the OpenJP2 libraries)** for `Windows x86 and x86_64 architectures, for Linux x86 and x86_64 architectures, and for Android armeabi-v7a, arm64-v8a, x86 and x86_64 ABIs.`
 
 **ALL** the code, **with the exception of code under wrapping folder**, is the same as in **the version 2.3.0** of the original OpenJPEG repository, which is the latest release so far.
 
 All the code that I had to modify / add is under the **wrapping** folder and the **root CMakeLists.txt**. In the following, I explain how I managed to make the JNI part of OpenJPEG work.
+
+Please note that only the **decoder** has been implemented and tested under **Java 1.8**. 
 
 ## How I managed to make the JNI part of OpenJPEG wotk ?
 
@@ -329,6 +331,20 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86_64" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86_64" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
 			*	cmake --build "path/to/build/dir/x86_64"
 
+
+## How to use the decoder ?
+
+- First, you have to load the JP2 native library. This is crucial because the JNI native library depends on it :
+`System.load("absolute/path/to/openjpegLib")` 
+
+- Then, instantiate an `OpenJPEGJavaDecoder ` object by passing it the absolute path to the JNI native library : `OpenJPEGJavaDecoder decoder = new OpenJPEGJavaDecoder("absolute/path/to/openjpegjniLib");` . **Optionally, you can pass it an implementation of the interface IJavaJ2KDecoderLogger to be able to get logs from the C code.**
+
+- Here, you have 2 choices : 
+
+   - either you pass parameters to the decoder similar to passing parameters to `opj_decompress`, via `decoder.setDecoderArguments(args)`
+   - or you pass the input stream to be decoded directly, via `decoder.setInputStream(byte[])`. Note that if the input stream is a JPT / JPIP stream, you must also call `decoder.setInputIsJPT()`. Also, you should set the output format via a call to `decoder.setOutputFormat(String)`, knowing that the only supported format for the output is BMP as explained in the README.
+
+- Finally, you call `decoder.decodeJ2KtoImage()`. In case you passed an input stream to the decoder, you shall get the output by calling `decoder.getOutputStreamBytes()` as a byte array.
 
 ## Who can use the code ?
 
