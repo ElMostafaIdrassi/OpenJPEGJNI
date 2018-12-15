@@ -9,8 +9,10 @@
 # set(OPENJPEG_NAMESPACE "GDCMOPENJPEG")
 cmake_minimum_required(VERSION 2.8.2)
 
-# To compile with -fPIC flag under Linux for shared libraries
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# To compile with -fPIC flag under nix for shared libraries
+ if(BUILD_SHARED_LIBS AND UNIX)
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # To fix the error : undefined reference to `png_init_filter_functions_neon' 
 # when building for ARM and especially ARM64
