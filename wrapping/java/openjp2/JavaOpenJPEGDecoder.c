@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018, El Mostafa IDRASSI
+ * Copyright (C) 2018-2019, El Mostafa IDRASSI
  * Copyright (c) 2002-2014, Universite catholique de Louvain (UCL), Belgium
  * Copyright (c) 2002-2014, Professor Benoit Macq
  * Copyright (c) 2001-2003, David Janssens
@@ -155,7 +155,7 @@ typedef struct opj_decompress_params {
 	/** Verbose mode */
 	OPJ_BOOL m_verbose;
 
-	/** tile number ot the decoded tile*/
+	/** tile number of the decoded tile */
 	OPJ_UINT32 tile_index;
 	/** Nb of tile to decode */
 	OPJ_UINT32 nb_tile_to_decode;
@@ -264,8 +264,8 @@ static void decode_help_display(void)
 		"  -split-pnm\n"
 		"    Split output components to different files when writing to PNM\n");
 	if (opj_has_thread_support()) {
-		fprintf(stdout, "  -threads <num_threads>\n"
-			"    Number of threads to use for decoding.\n");
+		fprintf(stdout, "  -threads <num_threads|ALL_CPUS>\n"
+		        "    Number of threads to use for decoding or ALL_CPUS for all available cores.\n");
 	}
 	fprintf(stdout, "  -quiet\n"
 		"    Disable output from the library and other output.\n");
@@ -1241,11 +1241,11 @@ static opj_image_t* convert_gray_to_rgb(opj_image_t* original)
 		l_new_image->comps[2].resno_decoded = original->comps[0].resno_decoded;
 
 	memcpy(l_new_image->comps[0].data, original->comps[0].data,
-		original->comps[0].w * original->comps[0].h * sizeof(OPJ_INT32));
+		sizeof(OPJ_INT32) * original->comps[0].w * original->comps[0].h);
 	memcpy(l_new_image->comps[1].data, original->comps[0].data,
-		original->comps[0].w * original->comps[0].h * sizeof(OPJ_INT32));
+		sizeof(OPJ_INT32) * original->comps[0].w * original->comps[0].h);
 	memcpy(l_new_image->comps[2].data, original->comps[0].data,
-		original->comps[0].w * original->comps[0].h * sizeof(OPJ_INT32));
+		sizeof(OPJ_INT32) * original->comps[0].w * original->comps[0].h);
 
 	for (compno = 1U; compno < original->numcomps; ++compno) {
 		l_new_image->comps[compno + 2U].factor = original->comps[compno].factor;
@@ -1253,7 +1253,7 @@ static opj_image_t* convert_gray_to_rgb(opj_image_t* original)
 		l_new_image->comps[compno + 2U].resno_decoded =
 			original->comps[compno].resno_decoded;
 		memcpy(l_new_image->comps[compno + 2U].data, original->comps[compno].data,
-			original->comps[compno].w * original->comps[compno].h * sizeof(OPJ_INT32));
+			sizeof(OPJ_INT32) * original->comps[compno].w * original->comps[compno].h);
 	}
 	opj_image_destroy(original);
 	return l_new_image;
@@ -1424,7 +1424,7 @@ static opj_image_t* upsample_image_components(opj_image_t* original)
 		}
 		else {
 			memcpy(l_new_cmp->data, l_org_cmp->data,
-				l_org_cmp->w * l_org_cmp->h * sizeof(OPJ_INT32));
+				sizeof(OPJ_INT32) * l_org_cmp->w * l_org_cmp->h);
 		}
 	}
 	opj_image_destroy(original);
@@ -2911,8 +2911,9 @@ JNIEXPORT jint JNICALL Java_org_openJpeg_OpenJPEGJavaDecoder_internalDecodeJ2Kto
 				destroy_parameters(&parameters);
 				return EXIT_FAILURE;
 			}
-			dirptr->filename_buf = (char*)malloc((size_t)num_images * OPJ_PATH_LEN * sizeof(
-				char)); /* Stores at max 10 image file names*/
+			/* Stores at max 10 image file names */
+			dirptr->filename_buf = (char*)malloc(sizeof(char) *
+			                                     (size_t)num_images * OPJ_PATH_LEN);
 			if (!dirptr->filename_buf) {
 				failed = 1;
 				goto fin;

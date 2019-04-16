@@ -6,22 +6,22 @@ OpenJPEG is an open-source JPEG 2000 codec written in C language. It has been de
 
 ## What is OpenJPEGJNI and what does it bring ? 
 
-OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes the broken JNI code and bindings for only the decoder.** 
+OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes and improves the broken JNI code and bindings for only the decoder.**
 
 It also **provides binaries** of the **native libraries (the JNI and the OpenJP2 libraries)** for `Windows x86 and x86_64 architectures, for Linux x86 and x86_64 architectures, and for Android armeabi-v7a, arm64-v8a, x86 and x86_64 ABIs.`
 
-**ALL** the code, **with the exception of code under wrapping folder**, is the same as in **the version 2.3.0** of the original OpenJPEG repository, which is the latest release so far.
+**ALL** the code, **with the exception of code under wrapping folder**, is the same as in **the version 2.3.1** of the original OpenJPEG repository, which is the latest release so far.
 
-All the code that I had to modify / add is under the **wrapping** folder and the **root CMakeLists.txt**. In the following, I explain how I managed to make the JNI part of OpenJPEG work.
+All the code that I had to modify / add is under the **wrapping** folder and the **root CMakeLists.txt**. In the following, I explain how I managed to make the JNI part of the OpenJPEG decoder build and work.
 
 Please note that only the **JNI decoder** has been **implemented** and **tested** under **Java 1.8**, on Windows, Linux and Android. 
 
-## How I managed to make the JNI part of OpenJPEG wotk ?
+## How I managed to make the JNI part of OpenJPEG build and work ?
 
 The code in `wrapping/java/openjp2/JavaOpenJpegDecoder.c` and the `CMakeLists.txt` are outdated.
 It makes use of **old** and **deprecated** functions and structures, usually defined in files under `src/lib/openmj2 (e.g. openjpeg.h).`
 Therefore, in order to make the JNI part of OpenJPEG work and to be able to build native JNI libraries for Windows, Linux and Android / ARM, 
-I had to get rid of the old and deprecated code and replace it with the newest one from the latest release of OpenJPEG, v.2.3.0.
+I had to get rid of the old and deprecated code and replace it with the newest one from the latest release of OpenJPEG, v.2.3.1.
 
     cd wrapping/java/openjp2
 
@@ -54,7 +54,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 	Side notes : (of when using an input stream)
 	
 	- **Only the BMP output format** is supported for when the caller sets the input stream from Java code. 
-	This is due to the fact that, to produce the other formats, the code makes use of functions (e.g. imagetoXXX() where XXX is the output format) which are difficult to port from the default "File phylosophy" into the "Stream phylosophy" due to a lack of generic code in these functions.
+	This is due to the fact that, to produce the other formats, the code makes use of functions (e.g. imagetoXXX() where XXX is the output format) which are difficult to port from the default "File philosophy" into the "Stream philosophy" due to a lack of generic code in these functions.
 	The function **imagetobmp()** was the only generic one amongst the others and the easiest to reimplement.
 	Feel free to implement the other functions if you can and make a pull request! :)
 	
@@ -63,7 +63,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 	- I made sure in my code to avoid storing the output stream as a large byte array in the C code and then pass it finally to the Java code.
 	Sometimes, bmp images can be very big and we cannot afford failing the decoding because of a lack of memory to hold the entire output.
 	
-	- I will provide, in the future, the function setLocking() in Java code, which can be called only when using input streams. 
+	- I will try to provide, in the future, the function setLocking() in Java code, which can be called only when using input streams. 
 	When used, it sets locking in the C Code, meaning that the buffers used during the decoding and the output of the result will be 
 	locked and prevented from being swapped, using VirtualLock / VirtualUnlock on Windows and mlock / munlock under Linux.
 	This is a work in progress, as there are multiple challenges regarding this. It is thus not yet implemented.
@@ -86,6 +86,13 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 		Also there is original code in `opj_decompress.c` and `JavaOpenJPEGDecoder.c` that makes use of free, realloc and company.
 		
 		To avoid errors due to this poisoning pragma, **I defined** **OPJ_SKIP_POISON** in the beginning of `JavaOpenJPEGDecoder.c`.
+		
+	*	When **building** for **Linux**, I faced an error when linking against third party library libpng.a 
+	
+			libpng.a(pngrutil.c.o): relocation R_X86_64_PC32 against symbol `png_crc_finish' can not be used when making a shared object; recompile with -fPIC
+		
+		This was solved by adding "POSITION_INDEPENDENT_CODE TRUE" as a target property in the CMakeLists.txt of all the 
+		thirdparty libraries under **thirdparty**, that is : liblcms2, libpng, libtiff and libz.
 		
 	*	When **building** for **Android** **under Windows using NDK**, **WIN32** is actually set.
 		I modified the following #ifdef in `JavaOpenJPEGDecoder.c` from : 
@@ -137,9 +144,9 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 			#define PNG_FILTER_OPTIMIZATIONS png_init_filter_functions_neon
 			#endif /* PNG_ARM_NEON_OPT > 0 */
 		
-		Gcc on 64bit ARM always has macro __ARM_NEON defined, since NEON in part of ARMv8
+		Gcc on 64bit ARM always has macro __ARM_NEON defined, since NEON in part of ARMv8.
 		Thus, on 64bit ARM, even without ENEBLE_NEON=ON being passed to cmake, png_init_filter_functions_neon which doesn't exist, will be called.
-		Usually, many Linux distributions have their own libpng package, so the issue it self doesn't have a big impact.
+		Usually, many Linux distributions have their own libpng package, so the issue itself doesn't have a big impact.
 		However, on Android / ARM, this issue exists, and to avoid it, I added the following to **CMakeLists.txt in root folder :** 
 		
 			if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
@@ -150,18 +157,18 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 			
 			DCMAKE_C_FLAGS:STRING="-DPNG_ARM_NEON_OPT=0"
 
-
+			
 ## How to build ?
 
 
-	Building using MSVC Visual Studio 15 2017 :
+	Building under Windows using MSVC Visual Studio 15 2017 :
 
-		N.B : need to use static runtime libraries (/MT) instead of dlls (/MD)
+		N.B : We need to use static runtime libraries (/MT) instead of dlls (/MD)
 			  Projects to configure : lcms2, openjp2, openjpegjni, opj_decompress, opj_compress, opj_dump, png, tiff, z
 
 		For x86
 			*	cd build/x86
-			*	cmake ..\.. -G "Visual Studio 15 2017" -DCMAKE_BUILD_TYPE="Debug" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON
+			*	cmake ..\.. -G "Visual Studio 15 2017" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON
 			*	For each project
 					--	Properties / C/C++ / Code Generation 
 							from /MDd to /MTd (for debug)
@@ -173,12 +180,12 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 						--	Properties / C/C++ / Language / 
 								Disable language extensions : No 
 								Conformance Mode : Yes (/permissive-)
-			*	Build the solution from VS
-			*	We find the .dll files in bin/Debug
+			*	Build the solution from VS (Chose the configuration beforehand)
+			*	We find the .dll files in bin/Release or bin/Debug etc... depending on the configuration selected
 
 		For x86_64
 			*	cd build/x86_64
-			*	cmake ..\.. -G "Visual Studio 15 2017 Win64" -DCMAKE_BUILD_TYPE="Debug" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON
+			*	cmake ..\.. -G "Visual Studio 15 2017 Win64" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON
 			*	For each project
 					--	Properties / C/C++ / Code Generation 
 							from /MDd to /MTd (for debug)
@@ -190,91 +197,52 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 						--	Properties / C/C++ / Language / 
 								Disable language extensions : No 
 								Conformance Mode : Yes (/permissive-)
-			*	Build the solution from VS
-			*	We find the .dll files in bin/Debug
+			*	Build the solution from VS (Chose the configuration beforehand)
+			*	We find the .dll files in bin/Release or bin/Debug etc... depending on the configuration selected
 
 ****************************************************
 
-	Building for Linux (on an Ubuntu 18.04 VM)
+	Building for Linux under Ubuntu 18.04
 	
 		*	Optional : build using -pedantic (disables language extensions)
 
-		*	sudo apt-get install liblcms2-dev libtiff-dev libpng-dev libz-dev	(for third party libraries)
+		*	sudo apt-get install liblcms2-dev libtiff-dev libpng-dev zlib1g-dev	(for Ubuntu built-in third party libraries)
 			sudo apt install openjdk-8-jdk 										(for JNI library)
-			sudo apt install gcc-multilib							(to build for 32-bit under 64-bit)
 
 			$ gcc --version
 				gcc (Ubuntu 7.3.0-27ubuntu1~18.04) 7.3.0
-			
-				Using built-in specs.
-				COLLECT_GCC=gcc
-				COLLECT_LTO_WRAPPER=/usr/lib/gcc/x86_64-linux-gnu/7/lto-wrapper
-				OFFLOAD_TARGET_NAMES=nvptx-none
-				OFFLOAD_TARGET_DEFAULT=1
-				Target: x86_64-linux-gnu
-				Configured with: ../src/configure -v --with-pkgversion='Ubuntu 7.3.0-27ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs --enable-languages=c,ada,c++,go,brig,d,fortran,objc,obj-c++ --prefix=/usr --with-gcc-major-version-only --program-suffix=-7 --program-prefix=x86_64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --with-sysroot=/ --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-vtable-verify --enable-libmpx --enable-plugin --enable-default-pie --with-system-zlib --with-target-system-zlib --enable-objc-gc=auto --enable-multiarch --disable-werror --with-arch-32=i686 --with-abi=m64 --with-multilib-list=m32,m64,mx32 --enable-multilib --with-tune=generic --enable-offload-targets=nvptx-none --without-cuda-driver --enable-checking=release --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu
-				Thread model: posix
-				gcc version 7.3.0 (Ubuntu 7.3.0-27ubuntu1~18.04)
 
-			$java -version
-				openjdk version "1.8.0_181"
-				OpenJDK Runtime Environment (build 1.8.0_181-8u181-b13-1ubuntu0.18.04.1-b13)
-				OpenJDK 64-Bit Server VM (build 25.181-b13, mixed mode)
+			$ java -version
+				openjdk version "1.8.0_191"
+				OpenJDK Runtime Environment (build 1.8.0_191-8u191-b12-2ubuntu0.18.04.1-b12)
+				OpenJDK 64-Bit Server VM (build 25.191-b12, mixed mode)
 
 			$ javac -version
-				javac 1.8.0_181
+				javac 1.8.0_191
 
-		For x86
-			*	cd build_linux\x86
-			*	cmake ../.. -G "Unix Makefiles" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_C_FLAGS:STRING="-m32" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
-			*	make
-
-				We get in bin
-				├── libopenjp2.a
-				├── libopenjp2.so -> libopenjp2.so.7
-				├── libopenjp2.so.2.3.0
-				├── libopenjp2.so.7 -> libopenjp2.so.2.3.0
-				├── libopenjpegjni.so
-				├── openjpeg.jar
-				├── opj_compress
-				├── opj_decompress
-				└── opj_dump
-
-				We need libopenjp2.so.2.3.0, libopenjpegjni.so, openjpeg.jar and why not libopenjp2.a, opj_compress, opj_decompress, opj_dump
-				file libopenjpegjni.so gives : 
-					libopenjp2.so.2.1.0: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), dynamically linked, 
-											BuildID[sha1]=b56fd8475ab34ff3e2091289a0201f2d403854ec, with debug_info, not stripped
-
-		For x86_64
-			*	cd build_linux\x86_64
-			*	cmake ../.. -G "Unix Makefiles" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cd build
+			*	cmake ../.. -G "Unix Makefiles" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
 			*	make
 
 				We get in bin 
 				├── libopenjp2.a
 				├── libopenjp2.so -> libopenjp2.so.7
-				├── libopenjp2.so.2.3.0
-				├── libopenjp2.so.7 -> libopenjp2.so.2.3.0
+				├── libopenjp2.so.2.3.1
+				├── libopenjp2.so.7 -> libopenjp2.so.2.3.1
 				├── libopenjpegjni.so
 				├── openjpeg.jar
 				├── opj_compress
 				├── opj_decompress
 				└── opj_dump
 
-
-				We need libopenjp2.so.2.3.0, libopenjpegjni.so, openjpeg.jar and why not libopenjp2.a, opj_compress, opj_decompress, opj_dump
-				file libopenjpegjni.so gives : 
-					libopenjp2.so.2.1.0: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=2c212129d95b787267bd8663b14e7442fcf997cf, 
-											with debug_info, not stripped
-
 ********************************************************
 
-	Building for Android (ARM)
+	Building for Android (ARM) under Windows
 		https://boringssl.googlesource.com/boringssl/+/version_for_cocoapods_6.0/third_party/android-cmake/README.md
 		https://developer.android.com/ndk/guides/abis
 		https://developer.android.com/ndk/guides/cmake
 
-		*	In Android Studio, install NDK (v.18) and CMake (v3.6.0-rc2)
+		*	In Android Studio, install NDK and CMake (revision: 3.6.4111459)
 			=>	armeabi removed since NDK17
 				MIPS 32-bit and 64-bit removed since NDK17
 				x86 and x86_64 under Android are very rare
@@ -285,39 +253,42 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 						x86_64
 
 		*	Download https://github.com/ninja-build/ninja/releases. 
-			Create C://Ninja and put the exe there
-			Add it to the path
+			Create, for example, C://Ninja and put the exe there
+			Finally, add it to the path
 
 		*	Need ndk-builds/ platforms : 
 				android-8 platform for ARM 
 				android-9 platform for x86 and MIPS 
 				android-21 platform for 64-bit ABIs
 			Missing platforms in ndk-builds/platforms of NDK 18
-			=>	Please note that recent NDK (r14+) has dropped support for platforms below API 9 (GINGERBREAD).
+			=>	Please note that recent NDKs (r14+) have dropped support for platforms below API 9 (GINGERBREAD).
 				Download from https://android.googlesource.com/platform/development/+/a77c1bdd4abf3c7e82af1f3b4330143d14c84103/ndk/platforms
 
-		*	Invalid Android NDK revision (should be 12): 18.1.5063045.
+		*	Invalid Android NDK revision (should be 12): 19.2.5345600
 			=>	Download NDK-12 from https://developer.android.com/ndk/downloads/older_releases
 			=>	Extract in C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12
+			
+		*	Only CMake version that works is : 3.6.4111459 and maybe below. Version 3.10 does not work as "Android Gradle - Ninja" generator cannot be created.
+			See https://stackoverflow.com/questions/48294319/cmake-error-could-not-create-named-generator-android-gradle-ninja
 
 		For armeabi-v7a :
 			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/armeabi-v7a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="armeabi-v7a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
+			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/armeabi-v7a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="armeabi-v7a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
 			*	cmake --build "path/to/build/dir/armeabi-v7a"
 
 		For arm64-v8a: 
 			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/arm64-v8a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="arm64-v8a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake" -DCMAKE_C_FLAGS:STRING="-DPNG_ARM_NEON_OPT=0"
+			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/arm64-v8a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="arm64-v8a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake" -DCMAKE_C_FLAGS:STRING="-DPNG_ARM_NEON_OPT=0"
 			*	cmake --build "path/to/build/dir/arm64-v8a"
 			
 		For x86 :
 			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
+			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
 			*	cmake --build "path/to/build/dir/x86"
 
 		For x86_64: 
 			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86_64" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Debug" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86_64" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
+			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86_64" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86_64" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
 			*	cmake --build "path/to/build/dir/x86_64"
 
 
