@@ -153,7 +153,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 			add_definitions(-DPNG_ARM_NEON_OPT=0)
 			endif()
 				
-		Then, when building for Android / ARM, we append :
+		Or, when building for Android / ARM, we can append :
 			
 			DCMAKE_C_FLAGS:STRING="-DPNG_ARM_NEON_OPT=0"
 
