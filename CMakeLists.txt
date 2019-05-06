@@ -9,19 +9,6 @@
 # set(OPENJPEG_NAMESPACE "GDCMOPENJPEG")
 cmake_minimum_required(VERSION 2.8.2)
 
-# To compile with -fPIC flag under nix for shared libraries
- if(BUILD_SHARED_LIBS AND UNIX)
-	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-endif()
-
-# To fix the error : undefined reference to `png_init_filter_functions_neon' 
-# when building for ARM and especially ARM64
-# On Linux, most distributions come with their own libpng
-# See : https://github.com/opencv/opencv/issues/7600 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
-	add_definitions(-DPNG_ARM_NEON_OPT=0)
-endif()
-
 if(COMMAND CMAKE_POLICY)
   cmake_policy(SET CMP0003 NEW)
   if (NOT (${CMAKE_VERSION} VERSION_LESS 3.0))
@@ -38,6 +25,19 @@ endif()
 set(OPENJPEG_LIBRARY_NAME openjp2)
 
 project(${OPENJPEG_NAMESPACE})
+
+# To compile with -fPIC flag under nix for shared libraries
+ if(BUILD_SHARED_LIBS AND UNIX)
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# To fix the error : undefined reference to `png_init_filter_functions_neon' 
+# when building for ARM and especially ARM64
+# On Linux, most distributions come with their own libpng
+# See : https://github.com/opencv/opencv/issues/7600 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
+	add_definitions(-DPNG_ARM_NEON_OPT=0)
+endif()
 
 # Do full dependency headers.
 include_regular_expression("^.*$")
