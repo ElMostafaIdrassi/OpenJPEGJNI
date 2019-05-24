@@ -6,11 +6,11 @@ OpenJPEG is an open-source JPEG 2000 codec written in C language. It has been de
 
 ## What is OpenJPEGJNI and what does it bring ? 
 
-OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes and improves the broken JNI code and bindings for only the decoder.**
+OpenJPEGJNI is a fork of the original OpenJPEG open-source project (as found on github : https://github.com/uclouvain/openjpeg/) that **fixes and improves the broken JNI code and bindings for only the JPEG decoder.**
 
-It also **provides binaries** of the **native libraries (the JNI and the OpenJP2 libraries)** for `Windows x86 and x86_64 architectures, for Linux x86 and x86_64 architectures, and for Android armeabi-v7a, arm64-v8a, x86 and x86_64 ABIs.`
+It also **provides binaries** of the **native libraries (the JNI and the OpenJP2 libraries)** for `Windows x86 and x86_64 architectures, for Linux x86 and x86_64 architectures, and for Android armeabi-v7a, arm64-v8a, x86 and x86_64 ABIs targeting API 16.`
 
-**ALL** the code, **with the exception of code under wrapping folder**, is the same as in **the version 2.3.1** of the original OpenJPEG repository, which is the latest release so far.
+**ALL** the code, **with the exception of the code under wrapping folder**, is the same as in **the version 2.3.1** of the original OpenJPEG repository, which is the latest release so far.
 
 All the code that I had to modify / add is under the **wrapping** folder and the **root CMakeLists.txt**. In the following, I explain how I managed to make the JNI part of the OpenJPEG decoder build and work.
 
@@ -51,7 +51,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 	
 	**The second option was the major change that I had to implement.**
 	
-	Side notes : (of when using an input stream)
+	Side notes : (of when using an byte[] stream as input)
 	
 	- **Only the BMP output format** is supported for when the caller sets the input stream from Java code. 
 	This is due to the fact that, to produce the other formats, the code makes use of functions (e.g. imagetoXXX() where XXX is the output format) which are difficult to port from the default "File philosophy" into the "Stream philosophy" due to a lack of generic code in these functions.
@@ -61,6 +61,8 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 	- I made sure in my code to avoid storing the input stream in the C code heap, by passing it as **Java NIO ByteBuffer** and getting only a reference from the C code to the byte array in the Java code.
 	
 	- I made sure in my code to avoid storing the output stream as a large byte array in the C code and then pass it finally to the Java code.
+	Instead, whenever there is a part of the JPEG byte stream that has been successfully decoded into a BMP image, I write the resulting output into 
+	the corresponding Java output byte array by calling the method **writeToOutputStream** from the C code.
 	Sometimes, bmp images can be very big and we cannot afford failing the decoding because of a lack of memory to hold the entire output.
 	
 	- I will try to provide, in the future, the function setLocking() in Java code, which can be called only when using input streams. 
@@ -150,7 +152,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 		However, on Android / ARM, this issue exists, and to avoid it, I added the following to **CMakeLists.txt in root folder :** 
 		
 			if(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
-			add_definitions(-DPNG_ARM_NEON_OPT=0)
+				add_definitions(-DPNG_ARM_NEON_OPT=0)
 			endif()
 				
 		Or, when building for Android / ARM, we can append :
@@ -221,7 +223,7 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 				javac 1.8.0_191
 
 			*	cd build
-			*	cmake ../.. -G "Unix Makefiles" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cmake .. -G "Unix Makefiles" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
 			*	make
 
 				We get in bin 
@@ -242,54 +244,62 @@ I had to get rid of the old and deprecated code and replace it with the newest o
 		https://developer.android.com/ndk/guides/abis
 		https://developer.android.com/ndk/guides/cmake
 
-		*	In Android Studio, install NDK and CMake (revision: 3.6.4111459)
-			=>	armeabi removed since NDK17
-				MIPS 32-bit and 64-bit removed since NDK17
-				x86 and x86_64 under Android are very rare
+		*	In Android Studio, install latest NDK (here, 19.2.5345600)
+			This way, we are certain we are going to use Clang toolchain instead of GCC.
+			=>	armeabi ABI is removed since NDK17
+				MIPS 32-bit and 64-bit ABIs are removed since NDK17
+				x86 and x86_64 ABIs under Android are very rare
 				=>	We target : 
 						armeabi-v7a
 						arm64-v8a
 						x86
 						x86_64
+						
+		*	Download and install the latest version of CMake (here 3.14)
+			We suppose that the path to the latest version of CMake executable has been added to PATH
+			
+		*	Make sure to have Java 1.8 in the PATH.
+			To find out which version of Java we have in PATH, we can execute the following command : 
+			
+				java -XshowSettings:properties -version
+				
+			and look for "java.home" entry.
 
-		*	Download https://github.com/ninja-build/ninja/releases. 
-			Create, for example, C://Ninja and put the exe there
-			Finally, add it to the path
-
-		*	Need ndk-builds/ platforms : 
-				android-8 platform for ARM 
-				android-9 platform for x86 and MIPS 
-				android-21 platform for 64-bit ABIs
-			Missing platforms in ndk-builds/platforms of NDK 18
+		*	NDK platforms : 
+				-> android-8 platform for ARM 
+				-> android-9 platform for x86 and MIPS 
+				-> android-21 platform for 64-bit ABIs
+			Missing platforms for NDK 18/19
 			=>	Please note that recent NDKs (r14+) have dropped support for platforms below API 9 (GINGERBREAD).
-				Download from https://android.googlesource.com/platform/development/+/a77c1bdd4abf3c7e82af1f3b4330143d14c84103/ndk/platforms
+				Download them if needed from https://android.googlesource.com/platform/development/+/a77c1bdd4abf3c7e82af1f3b4330143d14c84103/ndk/platforms
 
 		*	Invalid Android NDK revision (should be 12): 19.2.5345600
-			=>	Download NDK-12 from https://developer.android.com/ndk/downloads/older_releases
-			=>	Extract in C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12
-			
-		*	Only CMake version that works is : 3.6.4111459 and maybe below. Version 3.10 does not work as "Android Gradle - Ninja" generator cannot be created.
-			See https://stackoverflow.com/questions/48294319/cmake-error-could-not-create-named-generator-android-gradle-ninja
+				=>	Use android.toolchain.cmake file in /path/to/ndk/build/cmake/ instead of the one in /path/to/sdk/cmake/<version>/
+				
+		In the following, we are going to target API 16 as minimim targetted API, which means API 16 is the version of the API the project is compiled against.
+		We are using NDK 19.2.5345600, CMake 3.14 and Java 1.8.0_192.
+		We are going to instruct CMake to use the android.toolchain.cmake file in /path/to/ndk/build/cmake/ instead of the one in /path/to/sdk/cmake/<version>/.
+		We are going to use "MinGW Makefiles" as the CMake generator instead of the deprecated "Android Gradle - Ninja" generator which is only available under the version 3.6 that ships with Android Studio (See https://stackoverflow.com/questions/48294319/cmake-error-could-not-create-named-generator-android-gradle-ninja)
 
 		For armeabi-v7a :
-			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/armeabi-v7a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="armeabi-v7a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
-			*	cmake --build "path/to/build/dir/armeabi-v7a"
+			*	cd build/armeabi-v7a
+			*	cmake ../.. -G "MinGW Makefiles"  -DANDROID_PLATFORM="android-16" -DANDROID_ABI="armeabi-v7a" -DCMAKE_MAKE_PROGRAM="/path/to/ndk/prebuilt/windows-x86_64/bin/make.exe" -DCMAKE_ANDROID_NDK="/path/to/ndk"  -DCMAKE_TOOLCHAIN_FILE="/path/to/ndk/build/cmake/android.toolchain.cmake"  -DCMAKE_BUILD_TYPE="Release" -DBUILD_THIRDPARTY:BOOL=ON  -DBUILD_JAVA:BOOL=ON  -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cmake --build .
 
 		For arm64-v8a: 
-			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/arm64-v8a" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="arm64-v8a" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake" -DCMAKE_C_FLAGS:STRING="-DPNG_ARM_NEON_OPT=0"
-			*	cmake --build "path/to/build/dir/arm64-v8a"
+			*	cd build/arm64-v8a: 
+			*	cmake ../.. -G "MinGW Makefiles"  -DANDROID_PLATFORM="android-16" -DANDROID_ABI="arm64-v8a" -DCMAKE_MAKE_PROGRAM="/path/to/ndk/prebuilt/windows-x86_64/bin/make.exe" -DCMAKE_ANDROID_NDK="/path/to/ndk"  -DCMAKE_TOOLCHAIN_FILE="/path/to/ndk/build/cmake/android.toolchain.cmake"  -DCMAKE_BUILD_TYPE="Release" -DBUILD_THIRDPARTY:BOOL=ON  -DBUILD_JAVA:BOOL=ON  -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cmake --build .
 			
 		For x86 :
-			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
-			*	cmake --build "path/to/build/dir/x86"
+			*	cd build/x86
+			*	cmake ../.. -G "MinGW Makefiles"  -DANDROID_PLATFORM="android-16" -DANDROID_ABI="x86" -DCMAKE_MAKE_PROGRAM="/path/to/ndk/prebuilt/windows-x86_64/bin/make.exe" -DCMAKE_ANDROID_NDK="/path/to/ndk"  -DCMAKE_TOOLCHAIN_FILE="/path/to/ndk/build/cmake/android.toolchain.cmake"  -DCMAKE_BUILD_TYPE="Release" -DBUILD_THIRDPARTY:BOOL=ON  -DBUILD_JAVA:BOOL=ON  -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cmake --build .
 
 		For x86_64: 
-			*	cd C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\bin
-			*	cmake -G "Android Gradle - Ninja" -B"path/to/build/dir/x86_64" -H"path/to/source" -DANDROID_NDK="C:\Users\<user>\AppData\Local\Android\Sdk\ndk-12" -DBUILD_THIRDPARTY:BOOL=ON -DBUILD_JAVA:BOOL=ON -DCMAKE_BUILD_TYPE="Release" -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DANDROID_ABI="x86_64" -DCMAKE_TOOLCHAIN_FILE="C:\Users\<user>\AppData\Local\Android\Sdk\cmake\3.6.4111459\android.toolchain.cmake"
-			*	cmake --build "path/to/build/dir/x86_64"
+			*	cd build/x86_64
+			*	cmake ../.. -G "MinGW Makefiles"  -DANDROID_PLATFORM="android-16" -DANDROID_ABI="x86_64" -DCMAKE_MAKE_PROGRAM="/path/to/ndk/prebuilt/windows-x86_64/bin/make.exe" -DCMAKE_ANDROID_NDK="/path/to/ndk"  -DCMAKE_TOOLCHAIN_FILE="/path/to/ndk/build/cmake/android.toolchain.cmake"  -DCMAKE_BUILD_TYPE="Release" -DBUILD_THIRDPARTY:BOOL=ON  -DBUILD_JAVA:BOOL=ON  -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+			*	cmake --build .
 
 
 ## How to use the decoder ?
